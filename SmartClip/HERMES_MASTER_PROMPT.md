@@ -34,111 +34,147 @@ Privacy is a first-class requirement because clipboard contents may contain pass
 14. Every feature must have clear acceptance criteria and validation.
 
 ## TARGET PROJECT STRUCTURE
-Use this architecture unless a documented technical reason requires a change:
+Use this structure as the default architecture. Create directories/files when their corresponding feature is implemented; do not create empty placeholder files merely to match the tree. A documented technical reason may justify a change, but responsibilities must remain separated.
 
+```text
 smartclip/
 ├── src/
 │   ├── app/
 │   │   ├── App.tsx
 │   │   ├── routes.tsx
 │   │   └── providers.tsx
+│   │
 │   ├── components/
-│   │   ├── ui/
-│   │   ├── clipboard/
-│   │   ├── search/
-│   │   ├── tags/
-│   │   ├── ai/
-│   │   └── layout/
+│   │   ├── ui/                         # Shared shadcn/ui primitives
+│   │   ├── clipboard/                  # Clipboard cards, list, preview, actions
+│   │   ├── search/                     # Search input, filters, results
+│   │   ├── tags/                       # Tag UI
+│   │   ├── ai/                         # AI status/results UI
+│   │   └── layout/                     # Sidebar, header, shells
+│   │
 │   ├── pages/
 │   │   ├── Home.tsx
 │   │   ├── Pinned.tsx
 │   │   ├── Favorites.tsx
+│   │   ├── Recent.tsx
 │   │   ├── Tags.tsx
-│   │   ├── Search.tsx
 │   │   ├── Images.tsx
+│   │   ├── Links.tsx
+│   │   ├── Code.tsx
+│   │   ├── Search.tsx
 │   │   ├── Settings.tsx
 │   │   └── About.tsx
+│   │
 │   ├── features/
-│   │   ├── clipboard/
-│   │   ├── search/
-│   │   ├── tags/
-│   │   ├── ai/
-│   │   ├── settings/
-│   │   └── privacy/
-│   ├── hooks/
-│   ├── stores/
+│   │   ├── clipboard/                  # Clipboard feature state/logic
+│   │   ├── search/                     # Search feature state/logic
+│   │   ├── tags/                       # Tag feature state/logic
+│   │   ├── ai/                         # AI feature state/logic
+│   │   ├── settings/                   # Settings feature state/logic
+│   │   └── privacy/                    # Privacy feature state/logic
+│   │
+│   ├── hooks/                          # Reusable React hooks
+│   ├── stores/                         # Global client-side state
 │   ├── lib/
-│   │   ├── tauri.ts
+│   │   ├── tauri.ts                    # Typed frontend ↔ Tauri command bridge
 │   │   ├── utils.ts
 │   │   └── constants.ts
 │   ├── types/
-│   │   └── index.ts
+│   │   └── index.ts                    # Shared frontend/domain types
 │   └── main.tsx
+│
 ├── src-tauri/
 │   ├── src/
-│   │   ├── main.rs
-│   │   ├── lib.rs
-│   │   ├── commands/
+│   │   ├── main.rs                     # Native application entry point
+│   │   ├── lib.rs                      # Tauri builder, state, command registration
+│   │   │
+│   │   ├── commands/                   # Thin Tauri IPC boundary only
 │   │   │   ├── clipboard.rs
 │   │   │   ├── search.rs
 │   │   │   ├── tags.rs
 │   │   │   ├── settings.rs
 │   │   │   └── ai.rs
-│   │   ├── services/
+│   │   │
+│   │   ├── services/                   # Application/business logic
 │   │   │   ├── clipboard_service.rs
 │   │   │   ├── database_service.rs
 │   │   │   ├── search_service.rs
 │   │   │   ├── ai_service.rs
 │   │   │   ├── security_service.rs
 │   │   │   └── file_service.rs
-│   │   ├── models/
+│   │   │
+│   │   ├── models/                     # Domain/data models
 │   │   │   ├── clipboard.rs
 │   │   │   ├── tag.rs
 │   │   │   ├── source.rs
 │   │   │   └── settings.rs
-│   │   ├── db/
+│   │   │
+│   │   ├── db/                         # SQLite infrastructure
 │   │   │   ├── mod.rs
-│   │   │   ├── migrations/
-│   │   │   └── queries.rs
-│   │   ├── ai/
+│   │   │   ├── queries.rs
+│   │   │   └── migrations/
+│   │   │
+│   │   ├── ai/                         # Provider abstraction + adapters
 │   │   │   ├── mod.rs
 │   │   │   ├── provider.rs
 │   │   │   ├── openai.rs
 │   │   │   ├── gemini.rs
 │   │   │   └── local.rs
-│   │   ├── security/
+│   │   │
+│   │   ├── security/                   # Local privacy/security logic
 │   │   │   ├── secrets.rs
 │   │   │   └── sensitive_detector.rs
-│   │   └── windows/
+│   │   │
+│   │   └── windows/                    # Windows-specific integration
 │   │       ├── startup.rs
 │   │       ├── tray.rs
 │   │       ├── hotkeys.rs
 │   │       └── notifications.rs
-│   ├── migrations/
-│   ├── capabilities/
-│   ├── icons/
+│   │
+│   ├── capabilities/                  # Tauri permissions/capabilities
+│   ├── icons/                          # Application icons
+│   ├── migrations/                     # Keep only if tooling requires a root-level migration path
 │   ├── tauri.conf.json
 │   └── Cargo.toml
-├── public/
+│
+├── public/                             # Static frontend assets
+│   └── icons/
+│
 ├── tests/
-│   ├── frontend/
-│   └── integration/
+│   ├── frontend/                       # Frontend/unit/component tests
+│   └── integration/                    # Cross-layer/integration tests
+│
 ├── docs/
 │   ├── architecture.md
 │   ├── database.md
 │   ├── ai.md
 │   ├── privacy.md
 │   └── roadmap.md
+│
 ├── .github/
 │   └── workflows/
+│       ├── ci.yml
+│       └── release.yml
+│
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
 ├── tailwind.config.ts
 ├── README.md
 └── LICENSE
+```
 
-Adapt the structure when necessary, but keep responsibilities separated.
+### Structure rules
+- `src/components/` contains reusable presentation components; feature-specific business state belongs under `src/features/`.
+- `src/pages/` composes features into screens and should remain thin.
+- `src/lib/tauri.ts` is the frontend boundary for native commands; do not scatter raw `invoke()` calls throughout components.
+- `src-tauri/src/commands/` contains thin IPC handlers. Commands validate input, call services, and return serializable results; they should not contain large business logic.
+- `src-tauri/src/services/` contains core application logic.
+- `src-tauri/src/db/` owns SQLite access and migrations. Do not duplicate migration systems without a concrete tooling requirement.
+- `src-tauri/src/ai/` contains the provider abstraction and provider-specific adapters. AI code must not leak into unrelated services.
+- `src-tauri/src/windows/` contains Windows-only behavior so platform-specific code stays isolated.
+- `docs/` records architectural decisions and user-visible behavior that Hermes should preserve.
+- Avoid giant catch-all files such as `utils.ts`, `commands.rs`, or `services.rs` that accumulate unrelated responsibilities.
 
 ## DATABASE MODEL
 Use SQLite with migrations.
