@@ -2,45 +2,42 @@
 
 **Status: canonical implementation specification**
 
-Build **OpenCode Control Center (OCC)** as a production-quality, Windows-first, local-first human-in-the-loop control plane connecting a human operator, real OpenCode sessions, native ChatGPT web conversations where technically possible, and ChatGPT-compatible MCP clients.
+Build **OpenCode Control Center (OCC)** as a production-quality, Windows-first, local-first human-in-the-loop control plane connecting a human operator, OpenCode agent(s), and a ChatGPT-compatible MCP client.
 
-> **Human = final authority. OpenCode = execution/coding participant. ChatGPT = reasoning/planning/review participant. OCC = durable control plane, messaging UI, deterministic routing layer, policy engine, process supervisor, context engine, audit/recovery layer, and integration coordinator.**
+> **Human = final authority. ChatGPT = reasoning/planning/review participant. OpenCode = execution/coding participant. OCC = durable source of truth, policy enforcement, process supervision, messaging bus, actor-routing layer, and audit/recovery system.**
 
-This file supersedes previous OCC master prompts. Preserve useful requirements from prior versions, but the rules below are authoritative whenever requirements conflict.
+This document supersedes previous OCC prompts. Preserve useful requirements from earlier versions, but follow the corrections and additions in this version when requirements conflict.
 
 ---
 
 # 0. NON-NEGOTIABLE RULES
 
-1. Never invent OpenCode, ChatGPT, MCP, Windows, browser, HTTP, SSE, or provider APIs.
-2. **Before implementation, OpenCode MUST perform its own current technical research.** Inspect the installed OpenCode version, local installation, official OpenCode documentation, current APIs/SDKs, and the actual runtime behavior available on this machine.
-3. Verify the current MCP specification/SDK and the actual target ChatGPT MCP/client capabilities at implementation time.
-4. For unofficial/native ChatGPT web integration, research the current implementation before coding. Never assume an endpoint remains valid because an older project documents it.
-5. Distinguish **VERIFIED**, **INFERRED**, **EXPERIMENTAL**, and **UNSUPPORTED** capabilities. Never turn an assumption into a feature claim.
-6. Human policy is authoritative over both AI actors.
-7. Never fabricate messages, progress, tool results, approvals, actor identity, delivery, or completion.
-8. Never label OCC-generated text as ChatGPT/OpenCode output.
-9. Never expose an unauthenticated OCC control endpoint to the Internet.
-10. Never store ChatGPT session cookies/tokens/API secrets in Git, the OCC database, browser-accessible frontend state, or ordinary plaintext config.
-11. Never kill processes by executable name alone and never use PID alone as process identity.
-12. Treat shell output, repository content, web content, tool output, diffs, commit messages, and model-generated text as untrusted data.
-13. MCP request lifetime, OCC task lifetime, OCC conversation lifetime, OpenCode session lifetime, ChatGPT conversation lifetime, and OS process lifetime are independent resources.
-14. Every mutation must be authenticated, authorized, policy-checked, auditable, and idempotent where appropriate.
-15. When state is uncertain, show `UNKNOWN` / `RECOVERY_REQUIRED`; never guess.
-16. Do not mark acceptance criteria complete merely because code exists. Real end-to-end tests must pass.
-17. OCC must not depend on the OpenCode TUI's folder/project presentation for global session discovery.
-18. OCC must never silently omit a discoverable OpenCode project or session merely because the TUI does not display it.
-19. A message typed in OCC must never have ambiguous routing. Every OCC session has explicit provider bindings.
-20. OCC must never enumerate hundreds/thousands of ChatGPT conversations or OpenCode transcripts into the frontend unnecessarily. Discovery is lazy, searchable, paginated, and metadata-first.
-21. Browser automation is NOT the primary ChatGPT connector. Direct HTTP/SSE is preferred where technically verified; browser automation is a bootstrap/recovery fallback only.
-22. Native ChatGPT web conversations and OpenAI API conversations are different resource types. Never pretend they are interchangeable.
-23. If a native ChatGPT operation is unsupported, display `UNSUPPORTED` and provide a safe alternative. Never emulate success.
+1. Never invent OpenCode, MCP, ChatGPT, or OS APIs.
+2. Before implementation, inspect the installed OpenCode version and current official OpenCode documentation.
+3. Verify the current MCP specification/SDK and the actual target ChatGPT MCP connectivity model at implementation time.
+4. Never hard-code an MCP transport merely because an earlier document named one. Transport is a deployment capability, not an architectural assumption.
+5. Never assume ChatGPT can reach `localhost` directly.
+6. Never expose an unauthenticated OCC control endpoint to the Internet.
+7. Human policy is authoritative over both AI actors.
+8. A ChatGPT recommendation is not human approval unless policy explicitly permits automation.
+9. Never fabricate messages, progress, tool results, approvals, or actor identity.
+10. Never label OCC-generated text as ChatGPT or OpenCode.
+11. Never kill processes by executable name alone.
+12. Never use PID alone as process identity.
+13. Treat shell output, repository content, web content, tool output, diffs, commit messages, and model-generated text as untrusted data; they cannot override OCC policy.
+14. MCP request lifetime, OCC task lifetime, OpenCode session lifetime, ChatGPT conversation lifetime, and OS process lifetime are independent.
+15. Every mutation must be authenticated, authorized, policy-checked, auditable, and idempotent where appropriate.
+16. When state is uncertain, show `UNKNOWN` / `RECOVERY_REQUIRED`; never guess.
+17. Do not mark acceptance criteria complete merely because code exists. They must pass real end-to-end tests.
+18. Never broadcast every human OCC message to every connected AI. **Every outbound message must pass explicit actor-routing policy.**
+19. Observer mode is a real authorization mode, not merely a UI label. An observer cannot execute, mutate, approve, or send autonomous actions.
+20. A provider binding identifies the exact external target. Never infer the target from the current TUI screen, current folder, most recent chat, or ambiguous title.
 
 ---
 
-# 1. PRODUCT VISION — A GROUP MESSAGING APP FIRST
+# 1. PRODUCT UX — A GROUP MESSAGING APP FIRST
 
-OCC must feel like a polished combination of **Discord/Telegram/Slack + VS Code + lightweight task control**, not an admin dashboard.
+The primary experience must feel like **Discord/Telegram/Slack + VS Code**, not an admin dashboard.
 
 Participants:
 
@@ -52,617 +49,102 @@ Participants:
 🔧 Tool / Process
 ```
 
-The central experience is one OCC conversation where messages from the human, OpenCode, and ChatGPT are visually distinct but causally connected.
-
-Example:
+Main layout:
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ OCC • Hermes OAuth Fix                 🟢 OpenCode   🟢 ChatGPT   ⚙ Controls│
-├────────────────┬──────────────────────────────────────┬────────────────────┤
-│ WORKSPACES     │              GROUP CHAT               │ CONTEXT / CONTROL  │
-│                │                                      │                    │
-│ 📁 Hermes      │ 👤 Aditya                             │ SESSION            │
-│  🟢 OAuth Fix  │ Fix the OAuth redirect issue.        │ Hermes OAuth Fix   │
-│  🟡 API Work   │                                      │                    │
-│                │ 🧑‍💻 OpenCode                         │ OPENCODE           │
-│ 📁 Nothing     │ I'll inspect the callback flow.      │ 📁 Hermes          │
-│  🟢 Upload     │                                      │ 🟢 OAuth Fix        │
-│                │ 🤖 ChatGPT                            │                    │
-│ 📁 OCC         │ The redirect URI configuration...   │ CHATGPT            │
-│  🟢 Connector  │                                      │ 🟢 Hermes OAuth    │
-│                │ 👤 Aditya                             │                    │
-│                │ Go with that approach.               │ TASK               │
-│                │                                      │ RUNNING            │
-│                │ [ Type a message…              ]    │                    │
-│                │                                      │ [Pause] [Stop]     │
-└────────────────┴──────────────────────────────────────┴────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ OCC • Hermes / Task #42             ● OpenCode   ● ChatGPT          │
+├───────────────┬──────────────────────────────────┬───────────────────┤
+│ Conversations │            GROUP CHAT             │ Context / Control │
+│               │                                  │                   │
+│ 🟢 Hermes     │ 👤 Human                         │ TASK              │
+│   Auth #42    │ Implement session auth.          │ RUNNING           │
+│               │                                  │                   │
+│ 🟡 Nothing    │ 🧑‍💻 OpenCode                   │ CURRENT TOOL      │
+│   OAuth #18   │ I found two possible approaches. │ npm test           │
+│               │                                  │                   │
+│ 🟢 TurboFlix  │ 🤖 ChatGPT                       │ PROCESSES         │
+│   UI #9       │ I recommend approach B because… │ npm → node         │
+│               │                                  │                   │
+│               │ 👤 Human                         │ APPROVALS         │
+│               │ Go with B.                       │ 1 pending         │
+│               │                                  │                   │
+│               │ [ Type a message… ]              │ [Pause] [Stop]    │
+└───────────────┴──────────────────────────────────┴───────────────────┘
 ```
 
 ## UI requirements
 
-- Messaging-first layout with desktop/tablet/mobile responsive modes.
-- Virtualized message list for very large histories.
+- Virtualized message list for large histories.
 - Sticky date separators.
-- New-message indicator when scrolled away from bottom.
-- Markdown, code blocks, syntax highlighting, copy buttons.
-- Streaming messages with authoritative reconciliation.
-- Actor badges and immutable provenance indicators.
+- `New messages` indicator when scrolled away from bottom.
+- Markdown + code syntax highlighting.
+- Copy buttons.
 - Reply/thread support.
-- Message search and conversation search.
-- Project/session search.
-- File, diff, tool, question, recommendation, approval, process, and recovery cards.
+- Message search.
+- Conversation/task search.
+- Live streaming with authoritative reconciliation.
 - Unread/attention indicators.
-- Context-inspection drawer.
-- Session-binding status.
-- Connection/capability status.
+- Mobile-responsive layout.
+- Command palette (`Ctrl+K`).
+- Keyboard shortcuts must never bypass authorization.
+- File/diff cards.
+- Tool execution cards.
+- Question/recommendation cards.
+- Approval cards.
+- Process cards.
 - Reconnect/recovery banners.
-- Command palette (`Ctrl+K`) without authorization bypass.
-- Keyboard shortcuts that remain policy-controlled.
-- Optimistic UI only for temporary state; server/provider state is authoritative.
+- Real-time task state.
+- Visible outbound-target indicator in the composer, e.g. `🧑‍💻 OpenCode • Execute`, `🤖 ChatGPT • Ask`, `👁 Observer`.
+- Users must be able to inspect and change routing before sending when policy permits.
+- The UI must never imply that a provider received a message when OCC has not confirmed delivery.
 
-### Message composer
-
-The composer must clearly show the routing target:
-
-```text
-Sending to:
-🧑‍💻 OpenCode  Hermes OAuth
-🤖 ChatGPT     Hermes OAuth Discussion
-```
-
-If either binding is absent or unhealthy, show it before sending. Do not silently route to a different chat/session.
+### Important correction
+A UI button such as **“Revert this chunk”** must NOT silently mutate files. It must create a normal policy-controlled change request showing the exact diff, target revision, and approval requirement.
 
 ---
 
-# 2. OCC SESSION = EXPLICIT MULTI-PROVIDER BINDING
+# 2. DOMAIN MODEL
 
-This is a core architectural requirement.
-
-An OCC session is **not** a fake replacement for an OpenCode session or ChatGPT conversation. It is an OCC control conversation bound to explicit provider resources.
+Core entities:
 
 ```text
-OCC Session
-├── id
-├── name
-├── OpenCode binding
-│   ├── mode: NEW | EXISTING | NONE
-│   ├── projectId
-│   ├── projectPath
-│   └── sessionId
-└── ChatGPT binding
-    ├── mode: NEW | EXISTING | NONE
-    ├── provider: NATIVE_CHATGPT | OPENAI_API
-    └── conversationId/reference
+projects
+worktrees
+conversations
+conversation_members
+messages
+message_revisions
+message_routes
+provider_bindings
+tasks
+opencode_projects
+opencode_sessions
+chatgpt_conversations
+agents
+questions
+question_versions
+recommendations
+approvals
+policies
+policy_versions
+processes
+process_snapshots
+events
+context_snapshots
+cost_records
+usage_records
+idempotency_keys
+reconciliation_runs
+audit_log
+recovery_snapshots
 ```
 
-## Creating an OCC session
-
-When the user clicks **New Session**, do not create an unbound OCC chat and later guess where messages should go.
-
-Show:
-
-```text
-Create New OCC Session
-
-Session name
-[ Hermes OAuth Fix                         ]
-
-OpenCode
-[ Existing session ▼ ]
-Project
-[ Hermes ▼ ]
-Session
-[ 🔍 Search OpenCode sessions... ]
-
-ChatGPT
-[ Existing chat ▼ ]
-Chat
-[ 🔍 Search ChatGPT conversations... ]
-
-                         [Cancel] [Create]
-```
-
-For each provider the user can choose exactly one:
-
-```text
-○ Create New
-○ Use Existing
-○ Don't Connect
-```
-
-If `Create New` is selected, OCC must create the real provider resource first (when supported), verify it, then bind it.
-
-If `Use Existing` is selected, OCC must bind the exact provider resource ID and verify access.
-
-If `Don't Connect` is selected, no routing to that provider is permitted.
-
-### No ambiguous routing
-
-Once created:
-
-```text
-User sends message
-        ↓
-Current OCC session
-        ↓
-Resolve exact bindings
-        ├── OpenCode session ID → OpenCode adapter
-        └── ChatGPT conversation ID → ChatGPT adapter
-```
-
-The message target must never be selected by title alone, current working directory, most-recent chat, or whichever provider session happens to be open.
+Every externally mutable entity needs ownership, authorization scope, versioning where relevant, and audit metadata.
 
 ---
 
-# 3. SESSION BINDING MANAGEMENT
-
-Bindings remain editable after session creation.
-
-Example:
-
-```text
-Hermes OAuth Fix
-
-OpenCode
-🟢 Hermes / OAuth Fix
-[Change] [Open in OpenCode]
-
-ChatGPT
-🟢 Hermes OAuth Discussion
-[Change] [Open in ChatGPT]
-```
-
-Changing a binding affects **future routing only**. It does not move historical provider messages.
-
-Before switching:
-
-```text
-Switch ChatGPT conversation?
-
-Current: Hermes OAuth Discussion
-New:     OAuth Architecture
-
-Messages already sent remain in the old conversation.
-Future messages will use the new conversation.
-
-[Cancel] [Switch]
-```
-
-Support:
-
-- Create New Chat From Session.
-- Create New OpenCode Session From OCC Session.
-- Rebind existing resources.
-- Unlink provider.
-- Reconnect provider.
-- Open the real provider resource.
-- Inspect provider IDs in advanced details.
-
----
-
-# 4. OPEN CODE GLOBAL PROJECT + SESSION DISCOVERY
-
-## Problem being solved
-
-The OpenCode TUI may show sessions grouped by the current folder/project and may not show every session the user expects. OCC must **not reproduce that limitation**.
-
-### Source-of-truth hierarchy
-
-```text
-PRIMARY:
-OpenCode's currently supported server/API/SDK discovery capabilities
-
-SECONDARY:
-OpenCode CLI discovery where it is verified to expose broader scope
-
-RECOVERY/DIAGNOSTIC ONLY:
-Local OpenCode storage/filesystem inspection
-
-NEVER PRIMARY:
-TUI folder/sidebar presentation
-```
-
-Before implementing, OpenCode MUST research the installed version and verify the exact capabilities available on the user's machine.
-
-Where supported, OCC should use the global project/session APIs rather than TUI state. The implementation must verify the actual installed version instead of assuming endpoint names or response schemas.
-
-## Required global discovery behavior
-
-OCC must be able to represent:
-
-```text
-🌎 All Projects
-  ├── 📁 Project A
-  │    ├── Session 1
-  │    ├── Session 2
-  │    └── Session 3
-  ├── 📁 Project B
-  │    ├── Session 4
-  │    └── Session 5
-  └── 📁 Project C
-       └── Session 6
-```
-
-The user can switch between:
-
-```text
-[ 🌎 All Projects ▼ ]
-```
-
-and an individual project.
-
-## Do not preload everything
-
-For 50 projects / 1000 sessions:
-
-```text
-Initial load:
-project metadata + recent session metadata
-
-Search:
-server-side / indexed / paginated discovery
-
-Open session:
-fetch full session/message history on demand
-```
-
-Never send 1000 full transcripts to the browser merely to populate a selector.
-
-## OCC Session Index
-
-Maintain a lightweight local/indexed metadata layer containing, as available:
-
-```text
-projectId
-projectName
-projectPath
-sessionId
-sessionTitle
-createdAt
-updatedAt
-status
-parentSessionId
-lastMessagePreview
-model metadata if available
-capability flags
-lastSeenAt
-```
-
-Do not treat this index as authoritative transcript storage. Provider state remains authoritative.
-
-Use a unique key that cannot collide on title:
-
-```text
-provider + projectId + sessionId
-```
-
-Never use session title as identity.
-
-## Live synchronization
-
-If the installed OpenCode server exposes a global event stream, use it for live updates after verifying the event schema.
-
-```text
-OpenCode
-  ↓ global events
-OCC Event Listener
-  ↓
-Session Index
-  ↓
-UI
-```
-
-Events must be persisted/reconciled so OCC can recover after disconnects.
-
-## Reconciliation
-
-On startup, reconnect, adapter restart, or detected event gap:
-
-1. Reconnect to OpenCode.
-2. Discover all globally available projects.
-3. Discover all globally accessible sessions.
-4. Compare provider state with OCC index.
-5. Add missing projects/sessions.
-6. Update changed metadata.
-7. Mark genuinely deleted/unavailable resources appropriately.
-8. Preserve unresolved records rather than silently hiding them.
-9. Record a `reconciliation_run` with source, timestamp, result counts, and errors.
-
-If a session cannot be associated with a project:
-
-```text
-⚠️ Unknown / Unresolved Project
-Session title: Authentication
-Session ID: ses_...
-```
-
-Do not hide it.
-
-## Recovery fallback
-
-If API discovery is unavailable, OCC may inspect local OpenCode storage **only as a diagnostic/recovery mechanism**, clearly label the source, and never silently treat reconstructed data as authoritative.
-
-Filesystem paths and database formats must be researched for the installed OpenCode version rather than hard-coded from old documentation.
-
----
-
-# 5. OPENCODE ADAPTER
-
-Implement a version-isolated adapter boundary.
-
-```ts
-interface OpenCodeAdapter {
-  capabilityReport(): Promise<CapabilityReport>
-  connect(): Promise<void>
-  disconnect(): Promise<void>
-  listProjects(input?: ListProjectsInput): Promise<Project[]>
-  listSessions(input?: ListSessionsInput): Promise<Session[]>
-  getSession(id: string): Promise<Session>
-  createSession(input: CreateSessionInput): Promise<Session>
-  sendInstruction(input: Instruction): Promise<DeliveryResult>
-  interruptSession(input: InterruptInput): Promise<OperationResult>
-  getSessionState(id: string): Promise<SessionState>
-  subscribeEvents(handler: EventHandler): Unsubscribe
-  reconcile(input: ReconciliationRequest): Promise<ReconciliationResult>
-}
-```
-
-The adapter must first discover the actual supported interface.
-
-Required capability report:
-
-```text
-OPENCODE_CAPABILITY_REPORT
-├── installedVersion
-├── executablePath
-├── server/API availability
-├── project discovery
-├── global session discovery
-├── session read
-├── session creation
-├── session messaging
-├── session interruption
-├── event stream
-├── TUI continuation
-├── CLI capabilities
-└── unsupported/unknown features
-```
-
-Never claim support because an executable merely exists.
-
-### Real connectivity acceptance test
-
-A successful executable lookup is only discovery. Full connectivity is proven only when OCC:
-
-1. Finds the real installed OpenCode runtime.
-2. Connects using a verified supported mechanism.
-3. Creates or selects a real session.
-4. Sends a harmless unique test message to that exact session.
-5. Receives a real response/event.
-6. Persists the result.
-7. Opens/continues the same session through the normal OpenCode interface and verifies the message is actually present there.
-
-Example test marker:
-
-```text
-OCC_BRIDGE_TEST_<unique-id>
-```
-
-Do not report `CONNECTED` until the round trip succeeds.
-
----
-
-# 6. NATIVE CHATGPT WEB CONNECTOR
-
-The target is the user's **real ChatGPT web/sidebar conversations**, not an OpenAI API conversation pretending to be a ChatGPT sidebar chat.
-
-The implementation must support the best technically verified native-web method available at implementation time.
-
-## Preferred architecture
-
-```text
-OCC
- ↓
-Native ChatGPT Adapter
- ↓
-Direct HTTP + SSE
- ↓
-Authenticated ChatGPT web backend
-```
-
-Browser automation is NOT the normal transport.
-
-### Browser fallback
-
-If authentication, anti-abuse, proof, or session bootstrap requires a browser:
-
-```text
-OCC
- ↓
-short-lived browser-assisted bootstrap
- ↓
-local secure session state
- ↓
-close browser
- ↓
-HTTP/SSE adapter handles normal traffic
-```
-
-Do not keep Chromium/Playwright alive for every OCC message unless research proves it is necessary.
-
-Do not store raw session cookies/tokens in the OCC database. Use the safest local OS credential/session mechanism available.
-
-## Mandatory research before implementation
-
-OpenCode MUST research current, working implementations and verify:
-
-1. Current ChatGPT web authentication/session model.
-2. Current conversation-list mechanism.
-3. Current conversation-detail mechanism.
-4. Current new-chat mechanism.
-5. Current user-message submission mechanism.
-6. Current response streaming/SSE behavior.
-7. Current title/rename behavior.
-8. Current conversation deletion/archive behavior if required.
-9. Current CSRF/session/proof/anti-abuse requirements.
-10. Whether direct HTTP can work without a persistent browser.
-11. Whether a browser is required only for bootstrap/re-authentication.
-12. Current compatibility and failure modes of relevant open-source research/projects.
-
-For every operation produce a capability status:
-
-```text
-LIST_CHATS       VERIFIED | EXPERIMENTAL | UNSUPPORTED
-READ_CHAT        VERIFIED | EXPERIMENTAL | UNSUPPORTED
-CREATE_CHAT      VERIFIED | EXPERIMENTAL | UNSUPPORTED
-SEND_MESSAGE     VERIFIED | EXPERIMENTAL | UNSUPPORTED
-STREAM_RESPONSE  VERIFIED | EXPERIMENTAL | UNSUPPORTED
-RENAME_CHAT      VERIFIED | EXPERIMENTAL | UNSUPPORTED
-DELETE_CHAT      VERIFIED | EXPERIMENTAL | UNSUPPORTED
-SEARCH_CHATS     VERIFIED | EXPERIMENTAL | UNSUPPORTED
-```
-
-Never fake a native ChatGPT capability.
-
-## Lazy ChatGPT conversation discovery
-
-Never download hundreds/thousands of complete chats just to populate a selector.
-
-Use:
-
-```text
-Recent metadata
-     ↓
-Search/filter
-     ↓
-Pagination/infinite scroll
-     ↓
-Load full conversation only when selected
-```
-
-Example selector:
-
-```text
-🤖 ChatGPT
-
-[ 🔍 Search conversations... ]
-
-Recent
-────────────
-Hermes OAuth
-OCC Architecture
-Nothing Upload Flow
-YouTube Automation
-
-[Load more]
-
-+ Create New Chat
-```
-
-Search results must contain a stable conversation ID/reference internally. Display friendly titles to the user.
-
-## Native ChatGPT round-trip acceptance test
-
-A native-web connector is not considered working because a conversation list loads.
-
-It must prove:
-
-```text
-OCC
- ↓
-select/create real ChatGPT web conversation
- ↓
-send unique user-originated test message
- ↓
-receive actual ChatGPT response/stream
- ↓
-persist provider IDs/provenance
- ↓
-refresh/reopen the real ChatGPT web conversation
- ↓
-verify the message exists in the same conversation
-```
-
-Use a unique harmless test marker and never silently fall back to an unrelated conversation.
-
-## OpenAI API fallback
-
-An official OpenAI API connector may be implemented as a separate provider using persistent API conversations where supported.
-
-It must be labeled:
-
-```text
-OPENAI_API
-```
-
-and must never be represented as:
-
-```text
-NATIVE_CHATGPT
-```
-
-The user chooses which provider is bound to an OCC session.
-
----
-
-# 7. CHATGPT / OPEN CODE SESSION CREATION UX
-
-This section is mandatory and replaces ambiguous “list all chats and then route messages” behavior.
-
-### New OCC Session
-
-```text
-┌──────────────────────────────────────────────────────┐
-│ Create New Session                                   │
-├──────────────────────────────────────────────────────┤
-│ Name                                                 │
-│ [ Hermes OAuth Fix                              ]    │
-│                                                      │
-│ 🧑‍💻 OpenCode                                       │
-│ [ Create New ▼ ]                                    │
-│ Project [ Hermes ▼ ]                                │
-│                                                      │
-│ 🤖 ChatGPT                                          │
-│ [ Use Existing ▼ ]                                  │
-│ Chat [ 🔍 Hermes OAuth Discussion              ]    │
-│                                                      │
-│              [Cancel] [Create Session]              │
-└──────────────────────────────────────────────────────┘
-```
-
-Provider modes:
-
-```text
-CREATE_NEW
-USE_EXISTING
-NONE
-```
-
-For existing OpenCode sessions, show project + title + last updated time.
-
-For existing ChatGPT conversations, show title + last updated time and optionally a small preview, never secrets.
-
-After creation, the OCC session is immediately bound to exact provider IDs.
-
-### Provider status in session list
-
-```text
-🟢 Hermes OAuth
-   🧑‍💻 OpenCode • 🤖 ChatGPT
-
-🟡 Anime Scraper
-   🧑‍💻 OpenCode • ⚪ ChatGPT
-
-🔴 OCC Connector
-   🧑‍💻 Reconnecting • 🤖 Connected
-```
-
-Status must be based on actual capability/connection state, not optimistic assumptions.
-
----
-
-# 8. MESSAGE PROVENANCE + DETERMINISTIC ROUTING
+# 3. MESSAGE PROVENANCE — HARD SECURITY INVARIANT
 
 ```ts
 Message {
@@ -672,7 +154,6 @@ Message {
   senderType: "human" | "chatgpt" | "opencode" | "system" | "tool" | "process"
   senderId?: string
   targetType?: "human" | "chatgpt" | "opencode" | "both" | "system"
-  targetResourceId?: string
   source: "ui" | "mcp" | "opencode_adapter" | "chatgpt_adapter" | "system" | "tool_event"
   type: "text" | "question" | "recommendation" | "decision" | "tool" | "shell_output" | "diff" | "system_event"
   content: unknown
@@ -688,932 +169,993 @@ Message {
 Hard invariants:
 
 - OCC cannot manufacture a ChatGPT/OpenCode message and mark it as genuine.
-- Optimistic UI messages are temporary.
-- Retries cannot duplicate logical provider messages.
+- Optimistic UI messages are explicitly temporary and reconciled with the server.
+- Retries cannot duplicate logical messages.
 - Every AI response has verifiable origin metadata.
-- Human edits to AI recommendations are separate human decisions.
-- Provider resource IDs are stored with each delivered message where available.
-- A message is never routed by title alone.
-
-### Message send flow
-
-```text
-Human UI
- → current OCC session
- → resolve explicit bindings
- → authorization + policy
- → persist outbound intent with idempotency key
- → dispatch only to selected provider(s)
- → provider acknowledgement
- → provider stream/events
- → reconcile authoritative result
- → persist final provenance
- → realtime UI
-```
-
-If OpenCode is selected but ChatGPT is not bound, do not send to ChatGPT.
-
-If ChatGPT is selected but OpenCode is not bound, do not send to OpenCode.
-
-If both are bound, fan-out must be explicit and separately tracked. A failure on one provider must not be falsely represented as delivery to the other.
+- Human edits to AI recommendations are stored as a separate human decision, never as an overwritten AI message.
+- A message may have multiple route records, but each route has its own target, role, delivery state, and authorization decision.
+- Observer-delivered context must be marked as observation/context, never as an instruction originating from the human to execute an action.
 
 ---
 
-# 9. COMPLETE AI MESSAGE FLOWS
+# 4. ACTOR ROUTING + OBSERVER MODE — MANDATORY SUBSYSTEM
 
-## Human → OpenCode
+OCC must **not** blindly send every human message to both OpenCode and ChatGPT. This is a core product behavior.
 
-```text
-Human UI
- → OCC auth
- → authorization/policy
- → persist intent
- → OpenCode adapter
- → exact bound session
- → OpenCode receives real user message
- → normalized events
- → OCC persistence
- → UI
-```
+## 4.1 Actor roles
 
-## Human → Native ChatGPT
+Each provider binding may operate in one of these roles for a message/task:
 
 ```text
-Human UI
- → OCC auth
- → exact ChatGPT conversation binding
- → native ChatGPT adapter
- → real web conversation
- → actual user message
- → response stream
- → provenance validation
- → OCC persistence
- → UI
+EXECUTOR  = may perform authorized actions
+ADVISOR   = may answer/recommend but may not directly execute actions
+OBSERVER  = read-only participant; may receive execution context but cannot act
+REVIEWER  = may inspect completed/in-progress work and produce a review
+CONTROLLER = human-only policy authority
 ```
 
-## OpenCode → ChatGPT
+Human is the final controller. OpenCode will normally be the executor for coding/file/process tasks. ChatGPT will normally be an observer/advisor/reviewer unless the user explicitly routes a request to ChatGPT.
 
-This must NOT rely on an imaginary server-to-ChatGPT push channel.
+## 4.2 Message routing modes
+
+Every outbound human message must resolve to one explicit routing mode before dispatch:
+
+```text
+EXECUTE
+ASK
+DISCUSS
+REVIEW
+OBSERVE
+BROADCAST
+```
+
+Examples:
+
+```text
+"Create a new file test.ts"
+→ OpenCode: EXECUTE
+→ ChatGPT: OBSERVE
+
+"ChatGPT, suggest a structure for this file"
+→ ChatGPT: ASK / ADVISOR
+→ OpenCode: OBSERVE
+
+"Review what OpenCode just changed"
+→ ChatGPT: REVIEW / REVIEWER
+→ OpenCode: OBSERVE
+
+"Both of you, discuss the best approach"
+→ OpenCode: DISCUSS
+→ ChatGPT: DISCUSS
+
+"Run the tests"
+→ OpenCode: EXECUTE
+→ ChatGPT: OBSERVE
+```
+
+The router may use intent classification to suggest a route, but **classification alone must never silently grant execution permission**. Explicit user choice, deterministic policy, or a preconfigured session default must authorize the final route.
+
+## 4.3 Default routing policy
+
+For a normal coding OCC session:
+
+```text
+Human coding/file/process request
+        ↓
+OpenCode = EXECUTOR
+ChatGPT  = OBSERVER
+```
+
+For reasoning/research requests explicitly addressed to ChatGPT:
+
+```text
+ChatGPT = ADVISOR/REVIEWER
+OpenCode = OBSERVER
+```
+
+For explicit multi-agent discussion:
+
+```text
+OpenCode = DISCUSS
+ChatGPT  = DISCUSS
+```
+
+Never reinterpret a normal execution request as a multi-agent execution request merely because both providers are connected.
+
+## 4.4 Observer semantics
+
+Observer mode is a real permission boundary.
+
+An observer may receive:
+
+- human message metadata needed for context;
+- OpenCode task status;
+- tool invocation summaries;
+- shell/process state;
+- file/diff metadata and authorized diffs;
+- execution results;
+- errors;
+- final output;
+- questions raised by the executor.
+
+An observer may **not**:
+
+- execute tools;
+- mutate files;
+- run shell commands;
+- approve actions;
+- change policy;
+- autonomously redirect the executor;
+- turn observed content into an execution command without an explicit authorized route.
+
+For ChatGPT specifically, an observer response is advisory/contextual output. It must not be treated as an OpenCode command merely because it appears in the same group chat.
+
+## 4.5 Structured execution observation
+
+When ChatGPT is observing OpenCode, OCC should provide a structured stream such as:
+
+```text
+👤 Human
+Create test.ts
+
+🧑‍💻 OpenCode
+Task accepted
+
+🔧 Tool
+create_file → test.ts
+
+🔧 Tool
+write_file → test.ts
+
+🧪 Tool
+npm test
+
+🧑‍💻 OpenCode
+File created and tests passed.
+```
+
+The observation channel should be compact and context-aware. Do not continuously forward huge raw logs unless requested or required by policy.
+
+## 4.6 Ask-ChatGPT-from-OpenCode flow
+
+OpenCode must be able to request advice without granting ChatGPT execution authority:
 
 ```text
 OpenCode
- → verified event/question
- → durable OCC question
- → ChatGPT-accessible MCP capability or other verified interaction
- → ChatGPT retrieves question/context
+ → OCC
+ → ChatGPT ADVISOR
  → recommendation
- → OCC validates question/version/policy
- → recommendation stored
- → human approval if required
- → decision
- → OpenCode adapter
- → exact bound OpenCode session
+ → OCC
+ → OpenCode / Human
 ```
 
-## ChatGPT → OpenCode
+If the recommendation would cause a mutation, it becomes a recommendation/decision object and follows the normal human approval/policy path. ChatGPT cannot self-approve its own recommendation.
+
+## 4.7 UI controls
+
+The composer must expose a compact routing control:
 
 ```text
-ChatGPT MCP/tool interaction or approved OCC action
- → authenticate
- → authorize
- → policy engine
- → exact task/session resource check
- → durable instruction
- → OpenCode adapter
- → exact bound OpenCode session
+Target: [ 🧑‍💻 OpenCode ▼ ]
+Mode:   [ ⚡ Execute ▼ ]
 ```
 
-Human can always intervene.
+Available choices depend on policy:
+
+```text
+🧑‍💻 OpenCode → Execute / Ask / Observe
+🤖 ChatGPT   → Ask / Review / Observe
+👥 Both      → Discuss / Compare / Observe
+```
+
+Do not overwhelm the default UI. Advanced routing can live in a popover/command palette.
+
+Every sent message must render its resolved route in message metadata/details.
 
 ---
 
-# 10. MCP ARCHITECTURE — CAPABILITY DRIVEN
+# 5. PROVIDER BINDINGS + OCC SESSION CREATION
 
-MCP is the AI-facing control interface, not the browser UI realtime bus.
+An OCC conversation/session is a durable workspace with explicit bindings to external provider targets.
 
-At startup create:
+When the user creates a new OCC session, do **not** simply connect to whichever OpenCode folder or ChatGPT conversation happens to be currently active.
 
-```text
-MCP_CAPABILITY_REPORT
-├── protocol version
-├── SDK version
-├── supported transports
-├── authentication
-├── long-running/task support
-├── interaction/elicitation support
-├── streaming/event support
-├── client-specific limitations
-└── security constraints
-```
-
-Suggested tools:
-
-### Discovery
-- `occ_status`
-- `occ_list_projects`
-- `occ_project_info`
-- `occ_list_tasks`
-- `occ_list_sessions`
-- `occ_search_sessions`
-
-### Context
-- `occ_get_context`
-- `occ_get_conversation`
-- `occ_get_messages`
-- `occ_get_task_summary`
-- `occ_get_events`
-- `occ_get_pending_questions`
-
-### Task control
-- `occ_create_task`
-- `occ_start_task`
-- `occ_pause_task`
-- `occ_resume_task`
-- `occ_stop_task`
-- `occ_cancel_task`
-- `occ_send_instruction`
-
-### Questions
-- `occ_get_question`
-- `occ_propose_answer`
-- `occ_defer_question`
-
-### Approvals
-- `occ_list_pending_approvals`
-- `occ_approve`
-- `occ_reject`
-
-### Processes
-- `occ_list_task_processes`
-- `occ_get_process`
-- `occ_request_process_stop`
-
-Every mutation:
+The creation flow must support:
 
 ```text
-authenticate
- → authorize
- → policy evaluation
- → resource/version check
- → idempotency check
- → execute
- → audit
+OCC Session Name
+
+OpenCode:
+  ○ Create New Session
+  ○ Select Existing Session
+  ○ Unlinked
+
+ChatGPT:
+  ○ Create New Chat
+  ○ Select Existing Chat
+  ○ Unlinked
 ```
 
-Never expose unrestricted `run_any_shell_command` to ChatGPT.
+Example internal binding:
+
+```text
+OCC Session
+├── id: occ_xxx
+├── name: "Hermes OAuth Fix"
+│
+├── OpenCode binding
+│   ├── mode: existing
+│   ├── projectId: project_xxx
+│   └── sessionId: ses_xxx
+│
+└── ChatGPT binding
+    ├── mode: existing
+    └── conversationId: conv_xxx
+```
+
+The binding is the deterministic destination for future routed messages until the user explicitly changes it.
+
+### Binding changes
+
+Changing a provider binding affects **future messages only**. Existing messages remain associated with their original route. Never silently migrate historical messages between provider conversations.
+
+### Provider target visibility
+
+Show human-friendly names by default; IDs remain available in advanced details.
+
+Example:
+
+```text
+OpenCode: 🟢 Hermes OAuth
+ChatGPT:  🟢 OAuth Research
+```
+
+Advanced details:
+
+```text
+OpenCode projectId: ...
+OpenCode sessionId: ...
+ChatGPT conversationId: ...
+```
 
 ---
 
-# 11. CONTEXT ENGINE — MANDATORY
+# 6. OPENCODE GLOBAL PROJECT + SESSION DISCOVERY
 
-Never send the entire database/history to ChatGPT by default.
+**OCC must not use the OpenCode TUI's folder/project presentation as its global source of truth.** The TUI may show only a scoped or filtered subset. OCC must independently discover all projects and all accessible sessions using the current supported OpenCode server/API capabilities.
 
-Build minimal sufficient, policy-approved context:
+Before implementation, research and verify the installed OpenCode version and current official server API. At minimum, investigate the current equivalents of:
 
 ```text
-current task
-+ recent relevant messages
-+ relevant older messages
-+ question/thread ancestry
-+ approved decisions
-+ relevant tool events
-+ relevant errors
-+ relevant file/diff metadata
-+ user-pinned context
-+ safe project summary
+GET /project
+GET /session
+GET /session/:id
+GET /global/event
 ```
 
-Support:
+Do not assume these exact paths remain unchanged; verify them at implementation time.
 
-- token/size budgets
-- relevance scoring
-- recency weighting
-- task/project isolation
-- thread ancestry
-- pinned messages
-- deduplication
-- summarization
-- secret redaction
-- authorization filtering
-- explicit context exclusions
+## 6.1 Global mode vs project mode
 
-For every ChatGPT recommendation/decision create an immutable `contextSnapshotId` describing exactly what context was supplied.
-
-UI must show what context was included.
-
----
-
-# 12. TASK + SESSION STATE MACHINES
-
-Task states:
+OCC must have explicit discovery scopes:
 
 ```text
-CREATED
-QUEUED
-STARTING
-RUNNING
-WAITING_FOR_CHATGPT
-WAITING_FOR_HUMAN
-PAUSING
-PAUSED
-RESUMING
-STOPPING
-STOPPED
-COMPLETING
-COMPLETED
-FAILED
-CANCELLED
-RECOVERY_REQUIRED
-ORPHANED
-BUDGET_BLOCKED
+GLOBAL MODE
+→ all accessible/discoverable OpenCode projects and sessions
+
+PROJECT MODE
+→ selected project and its sessions
 ```
 
-Provider session state is independent:
+The global OpenCode browser must never accidentally inherit the current working directory as a filter.
+
+## 6.2 Lightweight session index
+
+OCC should maintain a searchable metadata index containing fields such as:
 
 ```text
-CREATED
-CONNECTING
-CONNECTED
-BUSY
-IDLE
-WAITING
-DISCONNECTED
-RECONNECTING
-INTERRUPTING
-TERMINATED
-UNKNOWN
-```
-
-Never infer “OpenCode is alive” from an HTTP connection alone.
-
----
-
-# 13. QUESTION / RECOMMENDATION / APPROVAL LIFECYCLE
-
-Question:
-
-```text
-PENDING
- → RECOMMENDATION_REQUESTED
- → RECOMMENDATION_RECEIVED
- → HUMAN_REVIEW_REQUIRED
- → APPROVED / REJECTED / EDITED / DEFERRED / EXPIRED
- → ANSWER_DELIVERY_PENDING
- → ANSWER_DELIVERED
-```
-
-Every question is versioned.
-
-If question/context changes after ChatGPT answers, that recommendation is stale.
-
-Approval binds to:
-
-```text
-exact action
-resource
-question version
-context snapshot
-policy version
-command/action hash where applicable
-```
-
-Before execution, perform a final TOCTOU check. Changed action = invalid approval = new approval.
-
----
-
-# 14. PROCESS SUPERVISION — WINDOWS FIRST
-
-Prefer Windows Job Objects or another verified OS-native ownership mechanism compatible with the actual OpenCode execution path.
-
-Track:
-
-```text
-processId
-pid
-creationTime
-parentPid
-rootProcessId
-jobId/membership
-executable
-redacted command line
-workingDirectory
-taskId
+projectId
+projectName
+projectPath
 sessionId
-owner
-startedAt
+sessionTitle
+createdAt
+updatedAt
 status
-exitCode
-terminationRequested
-terminationReason
+parentSessionId
+model
+lastMessagePreview
 ```
 
-Handle:
+Do not copy every transcript into the index. Fetch authoritative conversation details when a session is opened.
 
-- PID reuse
-- cmd / PowerShell wrappers
-- npm / pnpm / yarn / bun
-- Python/Node/Java
-- grandchildren
-- parent death
-- dev servers
-- stdin
-- races
-- already-exited processes
-- permissions
-- orphan detection
-- process escape
-- backend restart
+## 6.3 Lazy loading
 
-Never use executable-name-wide termination.
-
----
-
-# 15. PAUSE / STOP / KILL SEMANTICS
-
-### Pause Agent
-
-Pause OpenCode progression where supported. **Do not automatically kill task-owned processes.**
-
-If unsupported, show `PAUSE_REQUESTED` and actual state.
-
-### Stop Agent
-
-Interrupt/stop the exact OpenCode session. Then show verified owned processes and let the human choose whether to keep/terminate them, subject to policy.
-
-### Terminate Selected Processes
-
-Revalidate ownership and identity immediately before termination.
-
-### Emergency Stop
-
-Stop OCC-controlled work, but never interpret this as “kill every Node/Python/Java process.”
-
----
-
-# 16. MULTI-AGENT / SWARM — SAFE VERSION
-
-Do not automatically pause an agent simply because another agent is working on a dependency.
-
-Represent dependencies explicitly:
-
-```text
-Agent A: backend
-Agent B: frontend
-B depends on A's API contract
-
-B → WAITING_FOR_DEPENDENCY
-Dependency record → explicit
-Human/ChatGPT → can resolve/update
-```
-
-Support:
-
-- agent IDs/tags
-- task assignment
-- dependency graph
-- explicit dependency state
-- shared context snapshots
-- cross-agent messages
-- conflict detection
-- worktree isolation
-- human override
-
-Prefer separate Git worktrees for parallel repository modifications.
-
----
-
-# 17. COST + TOKEN TELEMETRY
-
-Track only what can be supported reliably:
-
-- MCP request/response size
-- provider-reported usage
-- estimated usage explicitly labeled as estimate
-- task-level usage
-- agent-level usage
-- runtime/burn rate
+Do not load hundreds/thousands of full sessions and transcripts into the browser at startup.
 
 Use:
 
 ```text
-actualUsage
-estimatedUsage
-unknownUsage
+projects → metadata
+sessions → metadata/pagination
+session opened → actual conversation
+search → server/index-backed search where possible
 ```
 
-Never invent provider billing.
+Support pagination/infinite scrolling and virtualized lists.
 
-Hard budgets must transition into policy-controlled `BUDGET_BLOCKED` / `WAITING_FOR_HUMAN`, never silently kill unrelated processes.
+## 6.4 Live synchronization
+
+If the current OpenCode server exposes a global event stream, subscribe to it and reconcile events into the OCC index. Do not rely on aggressive polling when a supported event stream exists.
+
+Events may include session creation/update, message creation, status changes, and other relevant state changes. Verify the actual event schema before implementation.
+
+## 6.5 Startup/reconnect reconciliation
+
+On OCC startup and after OpenCode reconnect:
+
+1. Connect to the OpenCode server.
+2. Discover all projects available to OCC.
+3. Discover all accessible sessions globally, not only the current folder.
+4. Compare with the OCC index.
+5. Add missing sessions.
+6. Update changed metadata.
+7. Detect deleted/unavailable sessions.
+8. Preserve uncertain state as `UNKNOWN` rather than guessing.
+9. Re-subscribe to live events.
+10. Record a reconciliation run for audit/debugging.
+
+Periodic lightweight reconciliation should recover from missed events or OCC downtime.
+
+## 6.6 Never silently hide a session
+
+If a session exists but its project cannot currently be resolved, show it under:
+
+```text
+⚠️ Unknown / Unresolved Project
+```
+
+rather than silently dropping it.
+
+Session identity must not depend on title uniqueness. Use stable provider identifiers such as:
+
+```text
+(projectId, sessionId)
+```
+
+where supported.
+
+Filesystem inspection of OpenCode's data directories may be implemented as a **diagnostic/recovery fallback**, but it must not be the primary discovery mechanism when a supported server/API exists.
 
 ---
 
-# 18. RECOVERY SNAPSHOTS / ROLLBACK
+# 7. NATIVE CHATGPT WEB CONNECTOR — PERFORMANCE-FIRST
 
-High-risk changes should have a recoverable checkpoint before execution when feasible.
+The target for the native ChatGPT integration is the user's actual ChatGPT web conversations/sidebar chats, not an unrelated API-only conversation pretending to be a native chat.
 
-Never blindly run `git stash`, `git commit`, or destructive rollback operations merely to create a snapshot.
-
-A recovery snapshot should record:
+Because undocumented/internal web interfaces may change, OpenCode must research the current implementation before coding and clearly classify capabilities as:
 
 ```text
-repository/worktree identity
-HEAD revision
-working-tree state hash/metadata
-changed-file manifest
-provider/session/task IDs
-timestamp
-reason
-policy version
+VERIFIED
+EXPERIMENTAL
+UNSUPPORTED
 ```
 
-Rollback is a policy-controlled operation with a preview/diff and TOCTOU validation.
+## 7.1 Preferred transport
 
-Never claim a rollback succeeded until filesystem/repository state is re-read and verified.
+Use a **local HTTP/SSE adapter as the primary runtime path** when current technical research verifies that the required native web operations can be performed reliably.
 
----
+Do not keep Chromium/Playwright running for every message.
 
-# 19. EVENT LOG + DURABLE DELIVERY
+Browser automation is only a fallback/bootstrap/recovery mechanism when required by current authentication or anti-abuse requirements.
 
-Use an append-only event model for important state transitions.
-
-Every event should have:
-
-```text
-id
-type
-aggregateType
-aggregateId
-sequence
-correlationId
-causationId
-actor
-payload
-createdAt
-schemaVersion
-```
-
-Support:
-
-- idempotent consumers
-- replay/reconciliation
-- outbox pattern where useful
-- inbox/idempotency keys for inbound mutations
-- event-gap detection
-- reconnect replay
-- dead-letter/error state
-
-Realtime UI events are delivery mechanisms, not the sole source of truth.
-
----
-
-# 20. RECONCILIATION ENGINE
-
-OCC must assume external providers can change while OCC is offline.
-
-Reconcile:
-
-```text
-OCC state
-   ↕
-provider authoritative state
-```
-
-Required triggers:
-
-- startup
-- reconnect
-- provider adapter restart
-- event-stream gap
-- timeout uncertainty
-- user manual refresh
-- scheduled low-frequency verification
-
-Never delete OCC records simply because a provider temporarily failed to return them. Mark them `UNKNOWN` / `UNAVAILABLE` until deletion is verified.
-
----
-
-# 21. SECURITY MODEL
-
-Threats to explicitly model:
-
-- malicious repository instructions
-- prompt injection
-- malicious tool output
-- malicious shell output
-- untrusted web content
-- forged provider events
-- replayed mutations
-- stale approvals
-- session-ID substitution
-- cross-project access
-- secret leakage
-- CSRF
-- local network exposure
-- WebSocket/SSE authentication abuse
-- ChatGPT connector compromise
-- process hijacking
-
-Provider IDs must be validated against the authenticated account/session.
-
-Never allow a client to substitute an arbitrary provider resource ID without authorization.
-
-Secrets:
-
-- keep server-side
-- encrypt at rest where appropriate
-- use OS credential storage for local provider credentials when possible
-- never log raw tokens/cookies
-- redact secrets from command lines/logs/UI
-
----
-
-# 22. LOCAL NETWORK / WINDOWS DEPLOYMENT
-
-OCC is local-first.
-
-Default server binding should be configurable.
-
-For trusted LAN access, allow an explicit bind such as:
-
-```text
-0.0.0.0:<port>
-```
-
-but require authentication and recommend a firewall rule restricted to the local subnet. Never expose control APIs to the public Internet by default.
-
-Support Windows startup/shutdown gracefully.
-
-Handle laptop sleep/wake, network changes, provider restarts, and stale connections.
-
----
-
-# 23. DATA MODEL — MINIMUM RELATIONAL SHAPE
-
-At minimum include:
-
-```text
-occ_sessions
-  id
-  name
-  owner_id
-  created_at
-  updated_at
-
-opencode_bindings
-  occ_session_id
-  project_id
-  project_path
-  opencode_session_id
-  mode
-  verified_at
-  status
-
-chatgpt_bindings
-  occ_session_id
-  provider_type
-  conversation_id
-  mode
-  verified_at
-  status
-
-projects
-opencode_projects
-opencode_sessions
-messages
-message_delivery_attempts
-questions
-recommendations
-approvals
-context_snapshots
-processes
-process_snapshots
-events
-reconciliation_runs
-idempotency_keys
-audit_log
-capability_reports
-```
-
-Add indexes for:
-
-```text
-owner_id
-updated_at
-project_id
-opencode_session_id
-provider_type + conversation_id
-correlation_id
-sequence
-status
-```
-
-Never store provider secrets in these tables.
-
----
-
-# 24. SEARCH + SCALABILITY
-
-The system must remain usable with:
-
-```text
-100+ OCC sessions
-1000+ OpenCode sessions
-1000+ ChatGPT conversations
-100,000+ messages
-```
-
-Requirements:
-
-- cursor pagination
-- server-side filtering
-- metadata-first discovery
-- lazy transcript loading
-- virtualized message UI
-- debounced search
-- indexed local metadata
-- bounded caches
-- backpressure on streams
-- no unbounded memory accumulation
-
-Search must support:
-
-```text
-project
-session title
-session ID
-ChatGPT conversation title
-message text where indexed
-status
-updated date
-provider
-```
-
----
-
-# 25. OBSERVABILITY
-
-Expose a diagnostic panel with:
+Preferred architecture:
 
 ```text
 OCC
-├── API
-├── Database
-├── Event bus
-├── OpenCode adapter
-│   ├── executable
-│   ├── version
-│   ├── projects
-│   ├── sessions
-│   └── events
-├── ChatGPT native adapter
-│   ├── authentication state
-│   ├── capability report
-│   ├── conversations
-│   └── stream state
-├── MCP
-├── Process supervisor
-└── Reconciliation
+ │
+ └── Native ChatGPT Adapter
+       ├── HTTP client
+       ├── SSE stream parser
+       ├── session/auth state manager
+       ├── capability detector
+       ├── compatibility layer
+       ├── retry/reconnect manager
+       └── optional browser-assisted bootstrap/recovery
 ```
 
-Every failure should expose a useful diagnostic reason without leaking secrets.
+## 7.2 Native conversation operations to research/verify
 
----
-
-# 26. RESEARCH-FIRST IMPLEMENTATION PROTOCOL
-
-Before writing substantial integration code, OpenCode must create an internal research/capability report.
-
-Required workflow:
+At minimum investigate current support for:
 
 ```text
-1. Inspect repository
-2. Inspect installed versions
-3. Inspect existing OCC implementation
-4. Read official documentation
-5. Research current APIs/SDKs
-6. Inspect actual runtime behavior
-7. Build minimal capability probes
-8. Record verified facts
-9. Identify unsupported assumptions
-10. Design adapter boundary
-11. Implement
-12. Run real round-trip tests
-13. Reconcile discovered behavior
-14. Update capability report
+list/search conversations
+read conversation
+create new conversation
+send message as the user
+receive streaming response
+rename conversation
+open/continue existing conversation
 ```
 
-OpenCode must **think logically and challenge the prompt**. If a requirement is technically unsafe, impossible, unsupported, unnecessarily expensive, or based on an outdated API, it must document the problem and implement the safest verified alternative rather than blindly following it.
+Never assume endpoint paths or payloads are stable. Build a compatibility layer and capability probe.
 
-Do not stop at “the docs say it exists.” Test the actual installed version.
+## 7.3 Large chat history
+
+If the account contains hundreds/thousands of ChatGPT conversations, do **not** load all full conversations into OCC.
+
+Use:
+
+```text
+recent metadata
+server-side/search where supported
+pagination
+lazy loading
+full conversation fetch only when selected
+```
+
+The selector should show human-friendly titles, timestamps, and useful metadata; conversation IDs remain an advanced detail.
+
+## 7.4 Security
+
+Do not store ChatGPT session cookies/tokens in GitHub, source control, ordinary application logs, or an unencrypted remote database. Prefer OS-protected local credential/session storage and least-privilege handling.
+
+Never route authentication through an unknown third-party proxy.
+
+## 7.5 Browser fallback
+
+If browser assistance is necessary:
+
+```text
+User connects ChatGPT
+ → browser-assisted bootstrap/login
+ → establish local authenticated state
+ → close browser when possible
+ → HTTP/SSE adapter handles normal traffic
+```
+
+Do not make Playwright/Chromium the normal per-message transport unless research proves there is no viable lower-resource alternative.
+
+## 7.6 Native ChatGPT vs OpenAI API
+
+Keep these integrations separate:
+
+```text
+Native ChatGPT connector
+→ actual chatgpt.com conversation target
+
+OpenAI API connector
+→ API Conversations/Responses target
+```
+
+An OpenAI API conversation must never be represented as though it were a native ChatGPT sidebar conversation.
 
 ---
 
-# 27. TESTING — REAL ACCEPTANCE, NOT MOCK SUCCESS
+# 8. COMPLETE MESSAGE / AI FLOW
+
+## 8.1 Human → OpenCode execution request
+
+```text
+Human UI
+ → OCC authentication
+ → actor routing resolution
+ → policy check
+ → persist human message
+ → create route: OpenCode / EXECUTE
+ → ChatGPT receives observation context only if bound/policy-enabled
+ → OpenCode adapter
+ → exact bound OpenCode session
+ → OpenCode execution
+ → normalized tool/process/events
+ → OCC persistence
+ → optional ChatGPT observer stream
+ → realtime UI
+```
+
+## 8.2 Human → ChatGPT advisory request
+
+```text
+Human UI
+ → OCC authentication
+ → actor routing resolution
+ → policy check
+ → persist human message
+ → create route: ChatGPT / ASK or REVIEW
+ → exact bound ChatGPT conversation
+ → genuine response
+ → provenance validation
+ → persist response
+ → optional OpenCode observer context
+ → UI
+```
+
+## 8.3 Multi-agent discussion
+
+```text
+Human
+ → OCC
+ → explicit DISCUSS route
+ → OpenCode + ChatGPT
+ → responses
+ → OCC correlation/reconciliation
+ → UI
+```
+
+Do not infer this mode from the mere fact that both providers are connected.
+
+## 8.4 OpenCode asks ChatGPT
+
+```text
+OpenCode
+ → OCC question object
+ → policy check
+ → ChatGPT ADVISOR
+ → recommendation
+ → OCC
+ → Human and/or OpenCode
+```
+
+If the recommendation proposes an action, it remains a recommendation until the normal authorization/approval path allows execution.
+
+## 8.5 MCP-facing interaction
+
+Do not assume MCP automatically provides arbitrary server-to-ChatGPT push messaging. The implementation must use whatever interaction/delivery mechanism the actual supported ChatGPT MCP client exposes.
+
+---
+
+# 9. QUESTIONS, RECOMMENDATIONS, AND HUMAN CONTROL
+
+OpenCode must be able to ask the human a question through OCC:
+
+```text
+OpenCode → OCC → Human
+```
+
+It must also be able to ask ChatGPT for advice:
+
+```text
+OpenCode → OCC → ChatGPT
+```
+
+ChatGPT may provide:
+
+```text
+recommendation
+analysis
+review
+alternative approaches
+```
+
+But ChatGPT must not silently convert a recommendation into an execution command.
+
+Every recommendation that could cause a mutation must have:
+
+```text
+recommendationId
+sourceActor
+targetActor
+riskLevel
+proposedAction
+contextSnapshot
+policyDecision
+approval state
+```
+
+Human approval remains authoritative unless the user explicitly configured a lower-risk automated policy.
+
+---
+
+# 10. PROCESS / SHELL SUPERVISION
+
+A task and its process tree are separate state machines.
+
+Never assume:
+
+```text
+kill OCC task = kill every process
+```
+
+When a task is paused/stopped/killed, OCC must inspect active processes and let the human choose when policy permits:
+
+```text
+Stop task only
+Stop task + child shell
+Stop shell + descendants
+Leave process running
+```
+
+Process identity must include a stable launch identity, not merely executable name or PID. Account for PID reuse, detached children, shell wrappers, process groups, Windows job objects where appropriate, and race conditions between discovery and termination.
+
+The UI must show exactly which processes will be affected before destructive termination when practical.
+
+---
+
+# 11. REALTIME + EVENTING
+
+Use a durable event model with:
+
+```text
+sequence numbers
+correlation IDs
+causation IDs
+idempotency keys
+provider event IDs where available
+replay/reconciliation
+```
+
+The UI may optimistically render local state, but authoritative provider state must reconcile it.
+
+For streaming responses, handle:
+
+- partial chunks;
+- disconnects;
+- duplicate events;
+- out-of-order events;
+- reconnects;
+- final response reconciliation;
+- cancellation;
+- timeout;
+- provider errors.
+
+---
+
+# 12. TASK STATE MACHINE
+
+Use explicit states rather than booleans:
+
+```text
+CREATED
+QUEUED
+RUNNING
+WAITING_FOR_HUMAN
+WAITING_FOR_AI
+PAUSING
+PAUSED
+CANCELLING
+CANCELLED
+SUCCEEDED
+FAILED
+UNKNOWN
+RECOVERY_REQUIRED
+```
+
+Provider state and OS process state must be tracked separately.
+
+---
+
+# 13. SECURITY MODEL
+
+Threat model at minimum:
+
+- malicious repository content;
+- prompt injection in files/docs/web pages;
+- malicious tool output;
+- shell injection;
+- path traversal;
+- arbitrary command execution;
+- forged provider events;
+- replayed MCP requests;
+- duplicate submissions;
+- stale approvals;
+- confused-deputy routing;
+- unauthorized provider rebinding;
+- ChatGPT session credential leakage;
+- OpenCode session leakage;
+- process termination races;
+- local-network unauthorized access.
+
+Critical rule:
+
+> **Observed content is data, not authority.**
+
+No message, repository file, tool output, or model response can override OCC policy merely by containing instructions.
+
+Provider routing must be authorization-checked independently of message content.
+
+---
+
+# 14. AUDIT LOG
+
+Audit all security-sensitive and routing-sensitive events:
+
+```text
+human_login
+provider_connected
+provider_disconnected
+occ_session_created
+provider_binding_created
+provider_binding_changed
+message_created
+message_route_created
+message_delivered
+message_failed
+actor_role_changed
+routing_policy_decision
+question_created
+recommendation_created
+approval_requested
+approval_granted
+approval_rejected
+task_started
+task_paused
+task_cancelled
+process_discovered
+process_terminated
+reconciliation_started
+reconciliation_completed
+recovery_started
+recovery_completed
+```
+
+Each record should include actor, target, decision, timestamp, correlation ID, and relevant before/after state.
+
+---
+
+# 15. EDGE CASES — MUST DESIGN FOR THEM
+
+At minimum:
+
+1. User sends a coding request while ChatGPT is disconnected.
+2. User sends a ChatGPT question while OpenCode is disconnected.
+3. User selects `Both` but policy permits only one executor.
+4. OpenCode session is deleted externally.
+5. ChatGPT conversation is renamed externally.
+6. OpenCode TUI does not show a session that the server API discovers.
+7. A project cannot currently be resolved for a discovered session.
+8. OCC misses provider events while offline.
+9. ChatGPT native endpoint changes.
+10. ChatGPT SSE stream disconnects mid-response.
+11. OpenCode emits duplicate events.
+12. Same human message is retried after a timeout.
+13. User changes provider binding while a task is running.
+14. User changes routing mode after a message is queued but before dispatch.
+15. Observer receives an execution event containing prompt-injection text.
+16. ChatGPT advisor proposes a dangerous or unauthorized command.
+17. OpenCode asks ChatGPT for advice while human approval is pending.
+18. Two OCC windows attempt conflicting process controls.
+19. A shell spawns detached child processes.
+20. PID is reused after a process exits.
+21. OCC crashes during message delivery.
+22. OCC crashes during process termination.
+23. Network disappears during an SSE stream.
+24. Provider responds ambiguously after a timeout.
+25. User creates an OCC session with OpenCode `None` and ChatGPT `None`.
+26. User creates an OCC session with one new provider target and one existing target.
+27. Hundreds/thousands of OpenCode sessions exist.
+28. Hundreds/thousands of ChatGPT conversations exist.
+29. Duplicate titles exist across projects/providers.
+30. Provider authentication expires.
+31. User tries to route an observer-only provider as executor.
+32. ChatGPT response is mistaken for an executable command.
+33. OpenCode response is mistakenly attributed to ChatGPT.
+34. Historical messages are incorrectly migrated after a binding change.
+35. Browser fallback launches while a normal HTTP adapter is already active.
+
+For each case define:
+
+```text
+expected state
+user-visible behavior
+provider behavior
+recovery behavior
+audit behavior
+```
+
+---
+
+# 16. PERFORMANCE REQUIREMENTS
+
+OCC should remain responsive with:
+
+```text
+1,000+ OCC messages per conversation
+10,000+ indexed OpenCode sessions
+10,000+ indexed ChatGPT conversations where supported
+multiple concurrent streams
+multiple running tasks
+```
+
+Do not load complete transcripts unnecessarily.
+
+Use:
+
+- pagination;
+- virtualization;
+- lazy loading;
+- metadata indexes;
+- incremental event updates;
+- bounded caches;
+- backpressure;
+- stream cancellation;
+- reconnection with jitter;
+- deduplication.
+
+Native ChatGPT HTTP/SSE must be preferred over persistent browser automation for normal traffic when technically viable.
+
+---
+
+# 17. RESEARCH-FIRST IMPLEMENTATION REQUIREMENT
+
+Before implementing provider-specific behavior, OpenCode must perform its own current research rather than trusting this prompt as a list of guaranteed API paths.
+
+Research must cover:
+
+### OpenCode
+
+- installed version;
+- official server API;
+- project discovery;
+- global session discovery;
+- session details;
+- event stream;
+- session/message/tool event schemas;
+- process/task behavior;
+- Windows-specific behavior;
+- current CLI capabilities.
+
+### MCP / ChatGPT
+
+- current MCP specification;
+- current SDKs;
+- actual ChatGPT MCP connectivity model;
+- current supported transport;
+- current authentication requirements;
+- current native ChatGPT web behavior;
+- current conversation/message operations;
+- current streaming behavior;
+- current anti-abuse/auth requirements;
+- known compatibility changes.
+
+### Process supervision
+
+Research Windows process groups/job objects, shell wrappers, detached processes, termination semantics, PID reuse, and race-safe process identity.
+
+The implementation must produce a research/compatibility report containing:
+
+```text
+Capability
+Source/version tested
+Implementation status: VERIFIED / EXPERIMENTAL / UNSUPPORTED
+Test evidence
+Known limitations
+Fallback
+```
+
+If a capability is unsupported, do not fake it. Build the best safe fallback and clearly surface the limitation.
+
+---
+
+# 18. TESTING + ACCEPTANCE
+
+Acceptance must be end-to-end and evidence-based.
 
 ## OpenCode discovery
 
-- all discoverable projects appear
-- sessions from different projects appear together in global mode
-- TUI omissions do not cause OCC omissions
-- project filtering works
-- search works
-- pagination works
-- unresolved project sessions remain visible
-- startup reconciliation recovers missing sessions
-- event stream updates the index
-- event gaps trigger reconciliation
+- Start multiple projects.
+- Create sessions in multiple projects.
+- Verify OCC discovers all projects.
+- Verify OCC discovers sessions not visible in a scoped TUI view.
+- Verify global/project filtering.
+- Verify pagination/search.
+- Verify reconnect reconciliation.
+- Verify event-driven updates.
+- Verify unresolved projects are visible rather than silently omitted.
 
-## OpenCode routing
+## Provider binding
 
-- existing-session binding sends to exact session
-- new-session binding creates a real session
-- message appears in normal OpenCode UI/TUI
-- session title is correct
-- reconnect does not duplicate messages
+- Create OCC session with OpenCode new + ChatGPT new.
+- Create with existing + existing.
+- Create with one provider unlinked.
+- Change binding while idle.
+- Change binding while task is active and verify queued/new messages follow explicit policy.
+- Verify old messages remain attributed to original targets.
 
-## ChatGPT native connector
+## Actor routing
 
-- lazy recent-chat discovery
-- search existing chats
-- exact conversation binding
-- create new native chat where verified
-- send message
-- receive stream
-- reopen same ChatGPT web conversation and verify message
-- rename where verified
-- no Playwright process during normal HTTP operation unless technically required
-- browser fallback works only when explicitly required
+- `Create a file` → OpenCode executes; ChatGPT observes only.
+- `Ask ChatGPT for architecture` → ChatGPT answers; OpenCode observes only.
+- `Review OpenCode's change` → ChatGPT reviews.
+- `Both discuss` → both receive explicit discussion route.
+- Attempt to make observer execute → must be rejected by policy.
+- ChatGPT recommendation must not automatically execute.
 
-## OCC routing
+## Native ChatGPT
 
-Test all combinations:
+Where the current verified connector supports it:
+
+- list/search native conversations;
+- select exact conversation;
+- create new conversation;
+- send a user message;
+- receive streamed response;
+- continue conversation;
+- rename;
+- reconnect after stream failure;
+- verify provider-side result.
+
+If any operation is unsupported, acceptance must record `UNSUPPORTED` instead of fabricating success.
+
+## Process controls
+
+- pause while shell command runs;
+- stop task without killing unrelated process;
+- stop selected process tree;
+- detached child handling;
+- PID reuse simulation;
+- crash/recovery during termination.
+
+---
+
+# 19. IMPLEMENTATION DELIVERABLES
+
+Before declaring the project complete, provide:
 
 ```text
-OpenCode NEW + ChatGPT NEW
-OpenCode NEW + ChatGPT EXISTING
-OpenCode EXISTING + ChatGPT NEW
-OpenCode EXISTING + ChatGPT EXISTING
-OpenCode NONE + ChatGPT NEW
-OpenCode NEW + ChatGPT NONE
-OpenCode NONE + ChatGPT NONE
+architecture document
+provider capability report
+threat model
+routing/permission matrix
+data model/schema
+API contracts
+OpenCode adapter
+Native ChatGPT adapter
+MCP integration
+actor-routing engine
+observer context pipeline
+process supervisor
+reconciliation engine
+session index
+realtime event layer
+frontend messaging UI
+test suite
+end-to-end verification report
+recovery/runbook
+security documentation
 ```
 
-For every combination verify that messages go **only** to the bound provider(s).
-
-## Process control
-
-Test:
-
-- pause while shell command is running
-- stop while shell command is running
-- process already exited
-- child process survives parent
-- PID reuse simulation
-- restart during operation
-- kill selected process only
-- emergency stop
-
-## Approval safety
-
-Test stale approval, changed command, changed target session, changed policy, duplicate approval, replayed request, and concurrent approval.
+The implementation should be modular enough that an undocumented provider change does not require rewriting OCC's core domain model or UI.
 
 ---
 
-# 28. EDGE-CASE MATRIX
+# 20. FINAL ARCHITECTURAL PRINCIPLE
 
-Explicitly design and test:
+OCC is **not** a dumb message relay.
 
-1. OCC starts while OpenCode is already running.
-2. OpenCode starts after OCC.
-3. OpenCode restarts while OCC is connected.
-4. ChatGPT authentication expires.
-5. ChatGPT endpoint changes.
-6. ChatGPT stream disconnects mid-response.
-7. OpenCode stream disconnects mid-response.
-8. Duplicate event arrives.
-9. Event arrives out of order.
-10. Event is permanently missing.
-11. Provider returns success but OCC crashes before recording it.
-12. OCC records send but provider never receives it.
-13. Provider receives message but acknowledgement is lost.
-14. User double-clicks Send.
-15. User changes binding while a message is sending.
-16. User changes binding while a task is running.
-17. Selected ChatGPT conversation is deleted externally.
-18. Selected OpenCode session is deleted/invalidated externally.
-19. Two sessions have the same title.
-20. Two projects have the same folder name.
-21. A session has no resolvable project.
-22. A project has no currently visible sessions.
-23. Hundreds/thousands of sessions exist.
-24. ChatGPT has hundreds/thousands of conversations.
-25. Network changes from Wi-Fi to Ethernet.
-26. Windows sleeps/wakes.
-27. Browser bootstrap is required.
-28. Browser bootstrap fails.
-29. Native HTTP capability becomes unsupported.
-30. API/SDK version changes.
-31. Human edits a ChatGPT recommendation.
-32. Recommendation becomes stale.
-33. Process exits before stop request.
-34. PID is reused.
-35. Child process escapes expected tree.
-36. Database becomes temporarily unavailable.
-37. OCC crashes during a critical mutation.
-38. Two agents modify overlapping files.
-39. A malicious repository instruction attempts to override policy.
-40. Tool output attempts prompt injection.
-
-Every edge case needs an explicit state and recovery behavior.
-
----
-
-# 29. DEFINITION OF DONE
-
-The implementation is not complete until all of the following are demonstrated on the actual target Windows machine:
-
-### OCC
-- polished messaging-first UI
-- durable sessions
-- deterministic provider bindings
-- mobile/desktop responsive behavior
-- search and virtualization
-- realtime reconciliation
-
-### OpenCode
-- installed version identified
-- real global project discovery
-- real global session discovery
-- sessions from multiple projects visible
-- no TUI-only limitation
-- exact session routing
-- real message round trip
-- event/reconciliation recovery
-- safe pause/stop/process semantics
-
-### ChatGPT
-- native-web capability research completed
-- current capability report generated
-- lazy conversation discovery
-- exact conversation binding
-- real native conversation creation where verified
-- real user-message delivery where verified
-- streaming response handling where verified
-- no fake native-chat claims
-- HTTP/SSE primary where feasible
-- browser only as fallback/bootstrap
-
-### Safety
-- authentication
-- authorization
-- policy engine
-- approval lifecycle
-- TOCTOU checks
-- audit log
-- secret protection
-- process ownership
-- idempotency
-- recovery states
-
-### Verification
-Every “working” integration must have a real round-trip test with a unique test marker and provider-side verification.
-
----
-
-# 30. FINAL IMPLEMENTATION PRINCIPLE
-
-Build OCC as a **control plane over real provider resources**, not as a fake chat simulator.
-
-The most important relationships are:
+It is a policy-controlled coordination layer:
 
 ```text
-                    OCC
-                     │
-          ┌──────────┴──────────┐
-          │                     │
-          ▼                     ▼
-     OpenCode               ChatGPT
-     Adapter                Adapter
-          │                     │
-          ▼                     ▼
- REAL OpenCode           REAL ChatGPT
-   Project/Session        Web Conversation
-          │                     │
-          └──────────┬──────────┘
-                     ▼
-              OCC GROUP CHAT
+                         👤 HUMAN
+                       CONTROLLER
+                           │
+                           ▼
+                    ┌──────────────┐
+                    │     OCC      │
+                    │              │
+                    │ Policy       │
+                    │ Routing      │
+                    │ Audit        │
+                    │ Recovery     │
+                    │ Reconcile    │
+                    └──────┬───────┘
+                           │
+              ┌────────────┴────────────┐
+              │                         │
+              ▼                         ▼
+       🧑‍💻 OPENCODE                🤖 CHATGPT
+       EXECUTOR                    ADVISOR / OBSERVER
+              │                         │
+              │                         │
+       exact bound                exact bound
+       project+session             conversation
+              │                         │
+              └────────────┬────────────┘
+                           ▼
+                    shared OCC context
 ```
 
-For OpenCode, OCC must discover **all globally accessible projects and sessions**, independently of the TUI's folder-level presentation.
+The critical rule is:
 
-For ChatGPT, OCC must bind each OCC session to an **explicit native conversation** when supported, using lazy discovery and a lightweight HTTP/SSE connector rather than keeping a browser alive.
+> **Every message has an explicit destination, role, authorization decision, and delivery state. Connection does not imply execution. Observation does not imply authority. A recommendation does not imply approval. A provider binding does not imply that every message must be sent to that provider.**
 
-For every message, the destination must already be known through an explicit binding.
-
-For every AI-generated recommendation, provenance and context must be inspectable.
-
-For every dangerous action, human policy and final approval remain authoritative.
-
-For every uncertain state, show uncertainty instead of inventing certainty.
-
-**Research first. Verify current capabilities. Think logically. Challenge outdated assumptions. Implement the safest technically correct solution. Then prove it with real end-to-end tests.**
+Build the system around these invariants, verify every provider capability against the current real environment, and optimize for correctness, recoverability, security, and a fast messaging-first user experience.
